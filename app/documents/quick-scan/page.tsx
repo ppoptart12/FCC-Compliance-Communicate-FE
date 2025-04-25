@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   FileText,
   Upload,
@@ -28,10 +28,12 @@ import {
   ArrowRight,
   Download,
   Printer,
+  Trash2,
 } from "lucide-react"
 import { useDropzone } from "react-dropzone"
 import { toast } from "sonner"
 import { documentService } from "@/lib/api"
+import { storage } from '@/lib/utils/storage'
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
@@ -301,7 +303,13 @@ interface OrganizationContext {
 }
 
 export default function QuickScanPage() {
-  const [scannedDocs, setScannedDocs] = useState<ScannedDocument[]>([])
+  const [scannedDocs, setScannedDocs] = useState<ScannedDocument[]>(() => {
+    // Initialize from localStorage on component mount
+    if (typeof window !== 'undefined') {
+      return storage.getScannedDocuments()
+    }
+    return []
+  })
   const [isScanning, setIsScanning] = useState(false)
   const [retryingDocIds, setRetryingDocIds] = useState<string[]>([])
   const [contextExpanded, setContextExpanded] = useState(false)
@@ -320,6 +328,13 @@ export default function QuickScanPage() {
     publicFileType: "online",
   })
   const { addFiles, currentPath } = useDocumentStore()
+
+  // Update localStorage whenever scannedDocs changes
+  useEffect(() => {
+    if (scannedDocs.length > 0) {
+      storage.saveScannedDocuments(scannedDocs)
+    }
+  }, [scannedDocs])
 
   const updateContext = (field: keyof OrganizationContext, value: string) => {
     setOrganizationContext((prev) => ({
@@ -493,7 +508,7 @@ export default function QuickScanPage() {
 
   const clearScannedDocs = () => {
     setScannedDocs([])
-    setSelectedDocId(null)
+    storage.clearScannedDocuments()
   }
 
   // Helper function to determine if context is filled out enough
@@ -607,11 +622,16 @@ export default function QuickScanPage() {
     })
     
     try {
-      // Remove the old document
+      // Remove the old document from state and storage
       setScannedDocs(prev => prev.filter(doc => doc.id !== docId))
+      storage.removeScannedDocument(docId)
       
       // Rescan the document
-      await simulateScan(docToRetry.originalFile)
+      const newDoc = await simulateScan(docToRetry.originalFile)
+      
+      // Update state with new document
+      setScannedDocs(prev => [...prev, newDoc])
+      
       toast.success(`Document "${docToRetry.name}" scan restarted successfully`, {
         description: "The document is being processed again.",
         duration: 4000,
@@ -646,11 +666,16 @@ export default function QuickScanPage() {
     })
     
     try {
-      // Remove the old document
+      // Remove the old document from state and storage
       setScannedDocs(prev => prev.filter(doc => doc.id !== docId))
+      storage.removeScannedDocument(docId)
       
       // Rescan the document
-      await simulateScan(docToRescan.originalFile)
+      const newDoc = await simulateScan(docToRescan.originalFile)
+      
+      // Update state with new document
+      setScannedDocs(prev => [...prev, newDoc])
+      
       toast.success(`Document "${docToRescan.name}" rescanned successfully`, {
         description: "The document has been rescanned with the latest compliance rules.",
         duration: 4000,
@@ -664,6 +689,18 @@ export default function QuickScanPage() {
       // Clear loading state
       setRetryingDocIds(prev => prev.filter(id => id !== docId))
     }
+  }
+
+  const removeDocument = (docId: string) => {
+    // Remove from state
+    setScannedDocs(prev => prev.filter(doc => doc.id !== docId))
+    // Remove from storage
+    storage.removeScannedDocument(docId)
+    // Clear selection if the removed document was selected
+    if (selectedDocId === docId) {
+      setSelectedDocId(null)
+    }
+    toast.success("Document removed successfully")
   }
 
   return (
@@ -1489,18 +1526,28 @@ export default function QuickScanPage() {
                               </div>
                             </div>
                           </div>
-                          {doc.status === "complete" && doc.complianceStatus && (
-                            <div
-                              className={cn(
-                                "flex h-6 items-center rounded-full px-3 text-xs font-medium",
-                                getStatusBadgeColor(doc.complianceStatus),
-                              )}
+                          <div className="flex items-center gap-2">
+                            {doc.status === "complete" && doc.complianceStatus && (
+                              <div
+                                className={cn(
+                                  "flex h-6 items-center rounded-full px-3 text-xs font-medium",
+                                  getStatusBadgeColor(doc.complianceStatus),
+                                )}
+                              >
+                                {doc.complianceStatus === "compliant" && "Compliant"}
+                                {doc.complianceStatus === "issues" && "Issues Found"}
+                                {doc.complianceStatus === "review" && "Review Needed"}
+                              </div>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => removeDocument(doc.id)}
                             >
-                              {doc.complianceStatus === "compliant" && "Compliant"}
-                              {doc.complianceStatus === "issues" && "Issues Found"}
-                              {doc.complianceStatus === "review" && "Review Needed"}
-                            </div>
-                          )}
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
 
                         {doc.status === "scanning" ? (

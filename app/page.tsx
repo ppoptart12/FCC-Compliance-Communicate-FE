@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress"
 import { ComplianceChart } from "@/components/compliance-chart"
 import { DocumentsNeeded } from "@/components/documents-needed"
 import { RecentAlerts } from "@/components/recent-alerts"
+import { FCCNews } from "@/components/fcc-news"
 
 export default function Page() {
   return (
@@ -79,17 +80,7 @@ export default function Page() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Critical Action Required</AlertTitle>
-          <AlertDescription>
-            Station WXYZ-FM license renewal application due in 30 days.{" "}
-            <Link href="/documents" className="underline">
-              Submit now
-            </Link>
-          </AlertDescription>
-        </Alert>
-
+        <FCCNews />
         <DocumentsNeeded />
       </div>
     </div>
